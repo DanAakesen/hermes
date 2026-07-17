@@ -37,6 +37,11 @@ Run the browser dashboard locally:
 
 The dashboard is loopback-only by default at `http://127.0.0.1:9119`.
 
+For future Desktop launches, double-click `scripts\\Launch-Hermes-Desktop.cmd`.
+Do not open `apps\\desktop\\release\\win-unpacked\\Hermes.exe` directly: it
+cannot see this repository's external virtual environment and will try to make
+a separate installation under `%USERPROFILE%\\.hermes`.
+
 ## Operating rules
 
 - Hermes is the sole harness and control plane.
