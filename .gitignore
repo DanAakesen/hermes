@@ -124,6 +124,11 @@ docs/superpowers/*
 # logs, and per-session caches are never artifacts of the codebase.
 .hermes/
 
+# Personal Hermes runtime state for this source checkout. This contains
+# sessions, API keys, channel tokens, and generated skills; it must never be
+# committed even though the source checkout itself is the personal agent OS.
+/.local/
+
 # Desktop/bootstrap install marker written into the managed checkout root by the
 # bootstrap installer. It is Hermes-managed runtime state, never a code change —
 # ignore it so `hermes update`'s `git stash push --include-untracked` does not

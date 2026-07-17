@@ -1,0 +1,24 @@
+# Personal Hermes baseline for this checkout.
+#
+# This is copied to .local/home/config.yaml by scripts/personal-bootstrap.ps1.
+# Keep secrets only in .local/home/.env; never commit them.
+
+updates:
+  # This is a personal, always-on agent environment. Preserve recoverable
+  # state before a source update.
+  pre_update_backup: full
+  non_interactive_local_changes: stash
+
+terminal:
+  # Messaging and scheduled jobs should start from your repository root.
+  cwd: "C:\\Repo"
+
+memory:
+  # Hermes may propose durable memory writes, but you approve them. Obsidian
+  # remains the intended source of long-term personal knowledge.
+  write_approval: true
+
+curator:
+  # Keep Hermes' self-improvement loop available, while retaining its normal
+  # backup/archive safeguards for agent-created skills.
+  enabled: true
