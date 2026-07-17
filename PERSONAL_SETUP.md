@@ -20,6 +20,23 @@ This checkout is Dana's editable Hermes agent OS.
 
 Place provider and channel credentials only in `.local\home\.env`. Do not put API keys, Copilot credentials, or messaging tokens in source-controlled files.
 
+## Desktop and dashboard
+
+The first Desktop launch builds the packaged Electron app. Later launches can
+reuse that build:
+
+```powershell
+.\scripts\hermes-personal.ps1 desktop --skip-build --ignore-existing
+```
+
+Run the browser dashboard locally:
+
+```powershell
+.\scripts\hermes-personal.ps1 dashboard --skip-build
+```
+
+The dashboard is loopback-only by default at `http://127.0.0.1:9119`.
+
 ## Operating rules
 
 - Hermes is the sole harness and control plane.
