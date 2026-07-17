@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Personal-fork guard: this checkout may only push to DanaAakesen/hermes.
+
+remote_name="$1"
+remote_url="$2"
+
+if [ "$remote_name" != "origin" ]; then
+  echo "Blocked: this Hermes checkout may only push to origin (your personal fork)." >&2
+  exit 1
+fi
+
+case "$remote_url" in
+  *github.com/DanAakesen/hermes.git) ;;
+  *)
+    echo "Blocked: origin does not point to github.com/DanAakesen/hermes." >&2
+    exit 1
+    ;;
+esac
