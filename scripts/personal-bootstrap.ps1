@@ -36,7 +36,15 @@ if ($InstallDependencies) {
     uv pip install --python $venvPython -e '.[all,dev]'
 }
 
+# Make the packaged Desktop app use this checkout even when it is launched
+# directly from a pinned Windows shortcut. The virtual environment remains
+# outside the source tree by design.
+[Environment]::SetEnvironmentVariable('HERMES_HOME', $runtimeHome, 'User')
+[Environment]::SetEnvironmentVariable('HERMES_DESKTOP_HERMES_ROOT', $repoRoot, 'User')
+[Environment]::SetEnvironmentVariable('HERMES_DESKTOP_PYTHON', $venvPython, 'User')
+
 Write-Output "Repository: $repoRoot"
 Write-Output "HERMES_HOME: $runtimeHome"
 Write-Output "Virtual environment: $venvRoot"
+Write-Output 'Desktop launch variables are configured for this Windows user.'
 Write-Output 'Next: add only credentials to .local/home/.env, then run scripts/hermes-personal.ps1 setup.'

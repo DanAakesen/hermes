@@ -37,10 +37,11 @@ Run the browser dashboard locally:
 
 The dashboard is loopback-only by default at `http://127.0.0.1:9119`.
 
-For future Desktop launches, double-click `scripts\\Launch-Hermes-Desktop.cmd`.
-Do not open `apps\\desktop\\release\\win-unpacked\\Hermes.exe` directly: it
-cannot see this repository's external virtual environment and will try to make
-a separate installation under `%USERPROFILE%\\.hermes`.
+Run `scripts\\personal-bootstrap.ps1` once before using Desktop. It configures
+your Windows user environment so **Hermes (Personal)** launches directly with
+no terminal window and can be pinned to the taskbar. The shortcut targets
+`apps\\desktop\\release\\win-unpacked\\Hermes.exe` and will use this checkout's
+external virtual environment.
 
 ## Operating rules
 
