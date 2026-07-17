@@ -43,8 +43,16 @@ if ($InstallDependencies) {
 [Environment]::SetEnvironmentVariable('HERMES_DESKTOP_HERMES_ROOT', $repoRoot, 'User')
 [Environment]::SetEnvironmentVariable('HERMES_DESKTOP_PYTHON', $venvPython, 'User')
 
+$venvScripts = Join-Path $venvRoot 'Scripts'
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$pathEntries = @($userPath -split ';' | Where-Object { $_ })
+if (-not ($pathEntries | Where-Object { $_.TrimEnd('\\') -ieq $venvScripts.TrimEnd('\\') })) {
+    [Environment]::SetEnvironmentVariable('Path', "$venvScripts;$userPath", 'User')
+}
+
 Write-Output "Repository: $repoRoot"
 Write-Output "HERMES_HOME: $runtimeHome"
 Write-Output "Virtual environment: $venvRoot"
 Write-Output 'Desktop launch variables are configured for this Windows user.'
+Write-Output 'The `hermes` command is available in new terminals.'
 Write-Output 'Next: add only credentials to .local/home/.env, then run scripts/hermes-personal.ps1 setup.'
