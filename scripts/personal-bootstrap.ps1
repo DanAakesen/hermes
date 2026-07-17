@@ -43,6 +43,14 @@ if ($InstallDependencies) {
 [Environment]::SetEnvironmentVariable('HERMES_DESKTOP_HERMES_ROOT', $repoRoot, 'User')
 [Environment]::SetEnvironmentVariable('HERMES_DESKTOP_PYTHON', $venvPython, 'User')
 
+# This fork may fetch upstream releases but must never push to the upstream
+# repository. The tracked hook enforces the same rule before every push.
+git config --local core.hooksPath .githooks
+git config --local remote.pushDefault origin
+if (git remote get-url upstream 2>$null) {
+    git config --local remote.upstream.pushurl DISABLED
+}
+
 $venvScripts = Join-Path $venvRoot 'Scripts'
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $pathEntries = @($userPath -split ';' | Where-Object { $_ })
