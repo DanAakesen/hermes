@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#10130f" />
+    <title>Hermes Voice</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div>
+          <p class="eyebrow">Personal Hermes</p>
+          <h1>Realtime voice</h1>
+        </div>
+        <span id="connectionBadge" class="badge">Offline</span>
+      </header>
+
+      <section class="voice-card" aria-live="polite">
+        <div id="pulse" class="pulse" aria-hidden="true"><span></span></div>
+        <p id="status" class="status">Ready to connect</p>
+        <p id="detail" class="detail">Hermes owns intent, tools, and memory.</p>
+        <button id="connectButton" class="primary" type="button">Start voice</button>
+        <button id="disconnectButton" class="secondary" type="button" hidden>Disconnect</button>
+      </section>
+
+      <section id="actionPanel" class="action-panel" hidden>
+        <h2 id="actionTitle">Hermes needs input</h2>
+        <p id="actionText"></p>
+        <div id="actionControls" class="action-controls"></div>
+      </section>
+
+      <section class="transcript-card">
+        <div class="section-heading">
+          <h2>Conversation</h2>
+          <button id="clearButton" class="text-button" type="button">Clear view</button>
+        </div>
+        <div id="transcript" class="transcript" aria-live="polite">
+          <p class="empty">Your spoken turns and Hermes responses appear here.</p>
+        </div>
+      </section>
+    </main>
+
+    <audio id="remoteAudio" autoplay></audio>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
