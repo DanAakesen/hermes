@@ -16,6 +16,7 @@ const provider = {
     let closed = false
     let speechActive = false
     let activeResponse = false
+    let outputAudioActive = false
     let pendingContinuation = false
     let responseCreatePending = false
     let continuationTimer = 0
@@ -97,7 +98,8 @@ const provider = {
         dc?.readyState !== 'open' ||
         activeResponse ||
         responseCreatePending ||
-        speechActive
+        speechActive ||
+        outputAudioActive
       ) {
         return
       }
@@ -197,17 +199,35 @@ const provider = {
           state({ status: 'thinking' })
           break
         case 'output_audio_buffer.started':
+          outputAudioActive = true
+          trace('audio.started')
+          void ensurePlayback()
+          state({ status: 'speaking' })
+          break
+        case 'response.output_audio.done':
+          // Audio generation can finish while WebRTC is still playing the
+          // acknowledgement. The post-tool response must wait for the actual
+          // output buffer to stop, otherwise Realtime can complete it empty.
+          break
         case 'response.output_audio.started':
           trace('audio.started')
           void ensurePlayback()
           state({ status: 'speaking' })
           break
         case 'output_audio_buffer.stopped':
-        case 'response.output_audio.done':
+          outputAudioActive = false
           trace('audio.stopped')
           state({ status: muted ? 'idle' : 'listening' })
+          continueWhenIdle()
           break
         case 'output_audio_buffer.cleared':
+          outputAudioActive = false
+          activeResponse = false
+          responseCreatePending = false
+          trace('response.cancelled')
+          state({ status: muted ? 'idle' : 'listening' })
+          continueWhenIdle()
+          break
         case 'response.cancelled':
           activeResponse = false
           responseCreatePending = false

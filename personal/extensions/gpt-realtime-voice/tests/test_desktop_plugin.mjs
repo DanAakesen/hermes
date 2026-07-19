@@ -154,6 +154,7 @@ emit({ type: 'response.created' })
 // vadResponseExpected set forever and suppress the post-tool response.create.
 emit({ type: 'input_audio_buffer.speech_started' })
 emit({ type: 'input_audio_buffer.speech_stopped' })
+emit({ type: 'output_audio_buffer.started' })
 emit({
   type: 'response.done',
   response: {
@@ -178,8 +179,15 @@ assert.deepEqual(toolCalls, [
     session_id: 'desktop-session'
   }
 ])
-assert.equal(sent.at(-2).type, 'conversation.item.create')
-assert.equal(sent.at(-2).item.type, 'function_call_output')
+assert.equal(sent.at(-1).type, 'conversation.item.create')
+assert.equal(sent.at(-1).item.type, 'function_call_output')
+assert.equal(sent.filter(event => event.type === 'response.create').length, 0)
+
+// Generating the preamble audio is not the same as finishing WebRTC playout.
+// The tool continuation must remain queued until output_audio_buffer.stopped.
+emit({ type: 'response.output_audio.done' })
+assert.equal(sent.filter(event => event.type === 'response.create').length, 0)
+emit({ type: 'output_audio_buffer.stopped' })
 assert.equal(sent.at(-1).type, 'response.create')
 assert.deepEqual(
   lifecycleEvents.filter(event => ['tool.complete', 'response.create'].includes(event.event)),
