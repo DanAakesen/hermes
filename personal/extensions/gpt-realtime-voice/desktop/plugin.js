@@ -20,7 +20,10 @@ const provider = {
     const handledCalls = new Set()
 
     const state = next => context.onState(next)
-    const trace = (event, details = {}) => console.info(`[gpt-realtime-voice] ${event}`, details)
+    // Electron forwards renderer warnings into desktop.log. Keep this as
+    // metadata-only prototype telemetry: never include transcript, arguments,
+    // tool output, or credentials.
+    const trace = (event, details = {}) => console.warn(`[gpt-realtime-voice] ${event}`, details)
     const send = event => {
       if (dc?.readyState !== 'open') {
         throw new Error('Realtime control channel is not open')
