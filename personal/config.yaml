@@ -24,7 +24,7 @@ curator:
   enabled: true
 
 mcp_servers:
-  # Reuse the local OIL/Obsidian MCP already installed for Dana's agent tools.
+  # Reuse the local OIL/Obsidian MCP already installed for Dan's agent tools.
   # The server owns the vault boundary and exposes no destructive delete tool.
   oil:
     command: "cmd.exe"

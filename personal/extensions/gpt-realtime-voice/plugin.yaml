@@ -1,7 +1,7 @@
 name: gpt-realtime-voice
 version: 0.2.0
 description: Native OpenAI Realtime voice provider for Hermes Desktop
-author: Dana Aakesen
+author: Dan Aakesen
 kind: standalone
 requires_env:
   - name: OPENAI_API_KEY

@@ -1,6 +1,6 @@
 # Personal Hermes setup
 
-This checkout is Dana's editable Hermes agent OS.
+This checkout is Dan's editable Hermes agent OS.
 
 ## Layout
 

@@ -1,6 +1,6 @@
 # Personal extensions
 
-This subtree contains Dana's versioned Hermes customizations. It is not an
+This subtree contains Dan's versioned Hermes customizations. It is not an
 upstream contribution surface.
 
 - Keep personal extension code under `personal/` and runtime state under
