@@ -9,13 +9,21 @@ import type {
 
 interface LiveVoiceProviderOptions {
   enabled: boolean
+  ensureSessionId: () => Promise<null | string>
   onFatalError: (error: unknown) => void
   onTranscript: (role: 'assistant' | 'user', text: string) => void
   provider: ComposerLiveVoiceProvider | null
   sessionId: null | string | undefined
 }
 
-export function useLiveVoiceProvider({ enabled, onFatalError, onTranscript, provider, sessionId }: LiveVoiceProviderOptions) {
+export function useLiveVoiceProvider({
+  enabled,
+  ensureSessionId,
+  onFatalError,
+  onTranscript,
+  provider,
+  sessionId
+}: LiveVoiceProviderOptions) {
   const [state, setState] = useState<Required<ComposerLiveVoiceState>>({ level: 0, muted: false, status: 'idle' })
   const liveRef = useRef<ComposerLiveVoiceSession | null>(null)
   const generationRef = useRef(0)
@@ -41,14 +49,22 @@ export function useLiveVoiceProvider({ enabled, onFatalError, onTranscript, prov
       return
     }
 
-    if (!sessionId) {
-      throw new Error('Open or send one message in a Hermes chat before starting live voice.')
+    const generation = ++generationRef.current
+    const resolvedSessionId = sessionId || (await ensureSessionId())
+
+    // Creating a session updates the active-session state and may rerender this
+    // hook. If that cleanup superseded this start, let the new generation own
+    // the provider instead of opening two WebRTC sessions.
+    if (generation !== generationRef.current) {
+      return
     }
 
-    const generation = ++generationRef.current
+    if (!resolvedSessionId) {
+      throw new Error('Hermes could not create a session for live voice.')
+    }
 
     const live = provider.create({
-      sessionId,
+      sessionId: resolvedSessionId,
       onError: error => {
         if (generation === generationRef.current) {
           onFatalError(error)
@@ -64,7 +80,7 @@ export function useLiveVoiceProvider({ enabled, onFatalError, onTranscript, prov
 
     liveRef.current = live
     await live.start()
-  }, [applyState, onFatalError, onTranscript, provider, sessionId])
+  }, [applyState, ensureSessionId, onFatalError, onTranscript, provider, sessionId])
 
   useEffect(() => {
     if (!provider || !enabled) {

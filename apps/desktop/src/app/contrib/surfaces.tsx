@@ -148,6 +148,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
       onDeleteSelectedSession={actions.onDeleteSelectedSession}
       onDismissError={actions.onDismissError}
       onEdit={actions.onEdit}
+      onEnsureSession={actions.onEnsureSession}
       onPasteClipboardImage={actions.onPasteClipboardImage}
       onPickFiles={actions.onPickFiles}
       onPickFolders={actions.onPickFolders}

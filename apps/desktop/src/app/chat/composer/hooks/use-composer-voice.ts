@@ -25,6 +25,7 @@ interface UseComposerVoiceArgs {
   focusInput: () => void
   insertText: (text: string) => void
   maxRecordingSeconds: number
+  onEnsureSession: () => Promise<null | string>
   onSubmit: ChatBarProps['onSubmit']
   onTranscribeAudio: ChatBarProps['onTranscribeAudio']
   sessionId: string | null | undefined
@@ -46,6 +47,7 @@ export function useComposerVoice({
   focusInput,
   insertText,
   maxRecordingSeconds,
+  onEnsureSession,
   onSubmit,
   onTranscribeAudio,
   sessionId,
@@ -133,6 +135,7 @@ export function useComposerVoice({
 
   const liveConversation = useLiveVoiceProvider({
     enabled: voiceConversationActive && Boolean(liveProvider),
+    ensureSessionId: onEnsureSession,
     onFatalError: handleLiveFatalError,
     onTranscript: handleLiveTranscript,
     provider: liveProvider,

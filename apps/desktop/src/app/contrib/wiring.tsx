@@ -731,6 +731,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     onDeleteSession: sessionId => void removeSession(sessionId),
     onDismissError: dismissError,
     onEdit: editMessage,
+    onEnsureSession: () => createBackendSessionForSend(),
     onLoadMoreMessaging: loadMoreMessagingForPlatform,
     onLoadMoreProfileSessions: loadMoreSessionsForProfile,
     onLoadMoreSessions: loadMoreSessions,

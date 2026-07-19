@@ -145,6 +145,7 @@ function TileChat({
           onDeleteSelectedSession={() => undefined}
           onDismissError={actions.dismissError}
           onEdit={actions.editMessage}
+          onEnsureSession={async () => runtimeId}
           onPasteClipboardImage={opts => composer.pasteClipboardImage(opts)}
           onPickFiles={() => void composer.pickContextPaths('file')}
           onPickFolders={() => void composer.pickContextPaths('folder')}
