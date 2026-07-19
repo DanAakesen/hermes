@@ -22,3 +22,23 @@ curator:
   # Keep Hermes' self-improvement loop available, while retaining its normal
   # backup/archive safeguards for agent-created skills.
   enabled: true
+
+mcp_servers:
+  # Reuse the local OIL/Obsidian MCP already installed for Dana's agent tools.
+  # The server owns the vault boundary and exposes no destructive delete tool.
+  oil:
+    command: "cmd.exe"
+    args:
+      - "/d"
+      - "/s"
+      - "/c"
+      - "C:\\Users\\danaakesen\\.copilot\\oil-mcp.cmd"
+    enabled: true
+    connect_timeout: 120
+    timeout: 300
+    supports_parallel_tool_calls: false
+    tools:
+      resources: false
+      prompts: false
+    sampling:
+      enabled: false

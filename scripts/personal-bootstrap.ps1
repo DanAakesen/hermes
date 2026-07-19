@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$InstallDependencies,
-    [switch]$ForceConfig
+    [switch]$ForceConfig,
+    [switch]$ForceInstructions
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,8 @@ $venvRoot = Join-Path $env:USERPROFILE '.hermes\venvs\repo-hermes'
 $venvPython = Join-Path $venvRoot 'Scripts\python.exe'
 $configTemplate = Join-Path $repoRoot 'personal\config.yaml'
 $runtimeConfig = Join-Path $runtimeHome 'config.yaml'
+$soulTemplate = Join-Path $repoRoot 'personal\SOUL.md'
+$runtimeSoul = Join-Path $runtimeHome 'SOUL.md'
 $runtimeEnv = Join-Path $runtimeHome '.env'
 
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
@@ -25,6 +28,10 @@ foreach ($directoryName in @('cron', 'logs', 'memories', 'sessions', 'skills', '
 
 if ($ForceConfig -or -not (Test-Path -LiteralPath $runtimeConfig)) {
     Copy-Item -LiteralPath $configTemplate -Destination $runtimeConfig -Force
+}
+
+if ($ForceInstructions -or -not (Test-Path -LiteralPath $runtimeSoul)) {
+    Copy-Item -LiteralPath $soulTemplate -Destination $runtimeSoul -Force
 }
 
 if (-not (Test-Path -LiteralPath $runtimeEnv)) {

@@ -77,7 +77,10 @@ class OpenAIRealtimeAdapter:
                     "addressed to you, call wait_for_user and do not respond conversationally afterward. "
                     "Use wait_for_user only for non-addressed audio; if the user clearly addresses you but "
                     "is unintelligible, ask for clarification. Do not mention transcripts or the voice "
-                    "transport unless asked."
+                    "transport unless asked. Match the language the user is speaking. Ask only one question "
+                    "at a time. After every completed tool call, speak the useful result or the actual failure "
+                    "before listening again. Do not read markdown, code, tables, long URLs, raw identifiers, "
+                    "or large result lists aloud; summarize what matters."
                 ),
                 "audio": {
                     "input": {

@@ -19,6 +19,9 @@ def test_session_is_native_voice_with_hermes_tools() -> None:
     assert session["tools"][-1]["name"] == "wait_for_user"
     assert "Hermes system" in session["instructions"]
     assert "background music" in session["instructions"]
+    assert "Match the language" in session["instructions"]
+    assert "After every completed tool call" in session["instructions"]
+    assert "large result lists" in session["instructions"]
     assert session["audio"]["input"]["noise_reduction"] == {"type": "far_field"}
     assert turn_detection["threshold"] == 0.6
     assert turn_detection["create_response"] is True

@@ -8,6 +8,7 @@ This checkout is Dana's editable Hermes agent OS.
 - Runtime state, sessions, generated skills, channel credentials, and API keys: `C:\Repo\hermes\.local\home`
 - Python environment: `C:\Users\danaakesen\.hermes\venvs\repo-hermes`
 - Durable personal knowledge: the existing Obsidian vault, not Hermes' internal memory files
+- Versioned global Hermes instructions: `personal\SOUL.md`
 
 `.local` is deliberately ignored. It must not be committed or copied to GitHub.
 
@@ -19,6 +20,16 @@ This checkout is Dana's editable Hermes agent OS.
 ```
 
 Place provider and channel credentials only in `.local\home\.env`. Do not put API keys, Copilot credentials, or messaging tokens in source-controlled files.
+
+`personal\SOUL.md` is the versioned instruction source for this profile. Apply
+an intentional instruction update to the runtime copy with:
+
+```powershell
+.\scripts\personal-bootstrap.ps1 -ForceInstructions
+```
+
+Start a new Hermes session after changing `SOUL.md`; existing sessions retain
+their original cached system prompt.
 
 ## Desktop and dashboard
 
