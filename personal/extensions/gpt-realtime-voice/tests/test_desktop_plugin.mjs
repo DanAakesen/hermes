@@ -122,6 +122,10 @@ assert.equal(states.at(-1).status, 'listening')
 
 const emit = event => dataChannel.onmessage({ data: JSON.stringify(event) })
 emit({ type: 'response.created' })
+// A late VAD event (for example echo or a brief interruption) used to leave
+// vadResponseExpected set forever and suppress the post-tool response.create.
+emit({ type: 'input_audio_buffer.speech_started' })
+emit({ type: 'input_audio_buffer.speech_stopped' })
 emit({
   type: 'response.done',
   response: {

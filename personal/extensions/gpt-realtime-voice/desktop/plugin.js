@@ -14,9 +14,9 @@ const provider = {
     let closed = false
     let speechActive = false
     let activeResponse = false
-    let vadResponseExpected = false
     let pendingContinuation = false
     let responseCreatePending = false
+    let continuationTimer = 0
     const handledCalls = new Set()
 
     const state = next => context.onState(next)
@@ -45,11 +45,12 @@ const provider = {
         dc?.readyState !== 'open' ||
         activeResponse ||
         responseCreatePending ||
-        speechActive ||
-        vadResponseExpected
+        speechActive
       ) {
         return
       }
+      clearTimeout(continuationTimer)
+      continuationTimer = 0
       responseCreatePending = true
       send({ type: 'response.create' })
       trace('response.create', { reason: 'tool-continuation' })
@@ -119,7 +120,8 @@ const provider = {
       switch (event.type) {
         case 'input_audio_buffer.speech_started':
           speechActive = true
-          vadResponseExpected = true
+          clearTimeout(continuationTimer)
+          continuationTimer = 0
           trace('speech.started')
           state({ status: 'listening' })
           break
@@ -127,10 +129,16 @@ const provider = {
           speechActive = false
           trace('speech.stopped')
           state({ status: 'thinking' })
+          // Give server VAD a moment to create the user's response first. If
+          // it does not, make sure a completed Hermes tool result cannot stay
+          // stranded waiting for another utterance.
+          clearTimeout(continuationTimer)
+          continuationTimer = setTimeout(continueWhenIdle, 250)
           break
         case 'response.created':
+          clearTimeout(continuationTimer)
+          continuationTimer = 0
           activeResponse = true
-          vadResponseExpected = false
           pendingContinuation = false
           responseCreatePending = false
           trace('response.created')
@@ -152,6 +160,7 @@ const provider = {
           responseCreatePending = false
           trace('response.cancelled')
           state({ status: muted ? 'idle' : 'listening' })
+          continueWhenIdle()
           break
         case 'conversation.item.input_audio_transcription.completed':
           appendTranscript('user', event.transcript)
@@ -203,6 +212,7 @@ const provider = {
       if (closed) return
       closed = true
       cancelAnimationFrame(levelFrame)
+      clearTimeout(continuationTimer)
       dc?.close()
       pc?.close()
       stream?.getTracks().forEach(track => track.stop())
