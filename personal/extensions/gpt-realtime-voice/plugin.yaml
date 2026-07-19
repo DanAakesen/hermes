@@ -1,10 +1,10 @@
 name: gpt-realtime-voice
-version: 0.1.0
-description: Local realtime voice surface that keeps Hermes as the agent
+version: 0.2.0
+description: Native OpenAI Realtime voice provider for Hermes Desktop
 author: Dana Aakesen
 kind: standalone
 requires_env:
   - name: OPENAI_API_KEY
-    description: OpenAI API key used only by the local server to mint short-lived Realtime client secrets
+    description: OpenAI API key used only by the Hermes backend to mint short-lived Realtime client secrets
     url: https://platform.openai.com/api-keys
     secret: true

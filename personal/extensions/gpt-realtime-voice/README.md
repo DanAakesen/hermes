@@ -1,33 +1,36 @@
 # GPT Realtime Voice for personal Hermes
 
-This plugin adds a local, mobile-shaped realtime voice client without changing
-Hermes core. OpenAI Realtime handles audio transport and speech rendering;
-Hermes remains the agent, including its configured Copilot provider, tools,
-session state, and approval boundaries.
+This extension replaces Hermes Desktop's primary voice-conversation loop with
+a native OpenAI Realtime WebRTC session. OpenAI hears and speaks directly;
+Hermes supplies the stable session instructions and tool schemas, validates
+every function call, executes it through the normal Hermes runtime, and keeps
+approval and durable-state authority.
 
-## Run locally
+## Install the development links
 
 From the repository root:
 
 ```powershell
 .\personal\extensions\gpt-realtime-voice\install-dev.ps1
-.\scripts\hermes-personal.ps1 voice serve --open
 ```
 
-The client listens on `http://127.0.0.1:8765`. The first milestone refuses
-non-loopback binds. `OPENAI_API_KEY` must exist only in
-`.local\home\.env`.
+This links the Python backend plugin into `.local/home/plugins/` and the
+Desktop runtime plugin into `.local/home/desktop-plugins/`. The standard
+`OPENAI_API_KEY` stays only in `.local/home/.env`; the renderer receives a
+short-lived Realtime client secret.
 
-## What the prototype proves
+Restart **Hermes (Personal)**, open an existing chat, and press the large
+AudioLines voice button. Dictation and read-aloud remain separate legacy
+controls; the primary conversation button uses Realtime when this plugin is
+enabled.
 
-- Browser microphone and speaker audio use an OpenAI Realtime WebRTC session.
-- Automatic Realtime assistant responses are disabled.
-- Completed speech is submitted to a persistent Hermes JSON-RPC session.
-- Hermes responses are rendered as streamed audio by an out-of-band Realtime
-  response.
-- Tool approvals remain explicit visual actions; voice never auto-approves.
+## Current milestone
 
-The browser client is suitable for local desktop testing. Phone access is a
-later HTTPS/authentication milestone because mobile browsers require a secure
-context for microphone access and the local server must not be exposed without
-an access gate.
+- Direct bidirectional audio over WebRTC; no transcript-gated STT → Hermes → TTS cascade.
+- `gpt-realtime-2.1` with server VAD, interruption, and model-owned speech.
+- The live model receives the current Hermes session prompt and function schemas.
+- Function calls run through the existing Hermes tool executor, including tool
+  progress, guardrails, approvals, memory, and delegation.
+- Completed transcripts are mirrored into Hermes session history asynchronously.
+- Local Desktop only. Mobile/remote access needs authenticated HTTPS and a
+  separate client milestone.

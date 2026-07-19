@@ -48,7 +48,7 @@ external virtual environment.
 - Hermes is the sole harness and control plane.
 - Codex CLI and Copilot CLI are workers invoked through Hermes skills or plugins.
 - Obsidian is the durable memory authority; Hermes internal memory is an approval-gated operational cache.
-- The Realtime/GPT Live voice interface belongs in a separate local plugin or service, not Hermes core.
+- The Realtime/GPT Live implementation belongs in `personal/`; shared source may contain only provider-neutral Desktop/session extension seams that Hermes plugins cannot supply today.
 - Keep core modifications on `personal/main`; use a plugin or skill before changing Hermes source.
 
 ## Updating

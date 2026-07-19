@@ -10,6 +10,7 @@
  *
  *   data kinds (`data`):      composer.middleware   (ComposerMiddleware)
  *                             composer.attachments  (ComposerAttachmentProvider)
+ *                             composer.liveVoice    (ComposerLiveVoiceProvider)
  *
  * Core keeps ownership of the transcript, input, and submit engine — these
  * seams AUGMENT the composer, they never replace it. Middleware runs as an
@@ -27,7 +28,8 @@ export const COMPOSER_AREAS = {
   leading: 'composer.leading',
   actions: 'composer.actions',
   middleware: 'composer.middleware',
-  attachments: 'composer.attachments'
+  attachments: 'composer.attachments',
+  liveVoice: 'composer.liveVoice'
 } as const
 
 export interface ComposerDraft {
@@ -52,6 +54,35 @@ export interface ComposerAttachmentProvider {
   /** Codicon name for the menu row. Defaults to `plug`. */
   icon?: string
   run: (ctx: ComposerAttachmentContext) => void | Promise<void>
+}
+
+export type LiveVoiceStatus = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'speaking'
+
+export interface ComposerLiveVoiceState {
+  level?: number
+  muted?: boolean
+  status?: LiveVoiceStatus
+}
+
+export interface ComposerLiveVoiceContext {
+  sessionId: string
+  onError: (error: unknown) => void
+  onState: (state: ComposerLiveVoiceState) => void
+  onTranscript: (role: 'assistant' | 'user', text: string) => void
+}
+
+export interface ComposerLiveVoiceSession {
+  start: () => Promise<void>
+  end: () => Promise<void> | void
+  stopTurn: () => void
+  toggleMute: () => void
+}
+
+/** A model-backed, bidirectional voice session. The provider owns media and
+ * transport; Hermes continues to own session context and tool execution. */
+export interface ComposerLiveVoiceProvider {
+  label: string
+  create: (ctx: ComposerLiveVoiceContext) => ComposerLiveVoiceSession
 }
 
 /**
@@ -91,4 +122,15 @@ export function useComposerAttachmentProviders(): Array<ComposerAttachmentProvid
   return useContributions(COMPOSER_AREAS.attachments)
     .map(c => ({ key: `${c.source ?? 'core'}:${c.id}`, ...(c.data as ComposerAttachmentProvider) }))
     .filter(p => Boolean(p.label && p.run))
+}
+
+/** Highest-priority live provider. No contribution keeps the legacy STT/TTS
+ * conversation path byte-for-byte intact. */
+export function useComposerLiveVoiceProvider(): ComposerLiveVoiceProvider | null {
+  const contribution = useContributions(COMPOSER_AREAS.liveVoice)[0]
+  const provider = contribution?.data as Partial<ComposerLiveVoiceProvider> | undefined
+
+  return typeof provider?.label === 'string' && provider.label.length > 0 && typeof provider.create === 'function'
+    ? (provider as ComposerLiveVoiceProvider)
+    : null
 }

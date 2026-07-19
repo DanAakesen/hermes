@@ -15,6 +15,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, NamedTuple, Optional
 
 from hermes_constants import (
@@ -191,6 +192,10 @@ _LONG_HANDLERS = frozenset(
         "complete.path",
         "complete.slash",
         "llm.oneshot",
+        # Live inference providers execute the session's normal Hermes tools.
+        # Tool calls may block on terminal work, approvals, or clarification,
+        # so keep the JSON-RPC reader responsive while they run.
+        "live.tool.execute",
         # Pet RPCs hit the network (manifest fetch / spritesheet download) or do
         # per-frame PNG decode/encode (pet.cells): inline they serialize on the
         # reader thread, so picker previews trickle in one at a time and the
@@ -8181,6 +8186,183 @@ def _(rid, params: dict) -> dict:
             "messages": _history_to_messages(history),
         },
     )
+
+
+def _live_realtime_tool(tool: dict) -> dict | None:
+    """Convert a chat-completions function tool to the Realtime shape."""
+
+    if not isinstance(tool, dict) or tool.get("type") != "function":
+        return None
+    function = tool.get("function")
+    if not isinstance(function, dict) or not function.get("name"):
+        return None
+    return {
+        "type": "function",
+        "name": str(function["name"]),
+        "description": str(function.get("description") or ""),
+        "parameters": function.get("parameters") or {"type": "object", "properties": {}},
+    }
+
+
+@method("live.session.describe")
+def _(rid, params: dict) -> dict:
+    """Describe the stable Hermes context exposed to a live model provider.
+
+    This is provider-neutral: Desktop plugins can use the returned prompt and
+    function schemas with any bidirectional inference transport. Execution
+    remains server-side through ``live.tool.execute``.
+    """
+
+    session, err = _sess(params, rid)
+    if err:
+        return err
+    if _session_uses_compute_host(session):
+        return _err(rid, 4009, "live inference is not available for compute-host sessions")
+
+    agent = session.get("agent")
+    if agent is None:
+        return _err(rid, 5000, "session agent is unavailable")
+    try:
+        instructions = getattr(agent, "_cached_system_prompt", "") or agent._build_system_prompt(None)
+        agent._cached_system_prompt = instructions
+        tools = [
+            converted
+            for tool in (getattr(agent, "tools", None) or [])
+            if (converted := _live_realtime_tool(tool)) is not None
+        ]
+        return _ok(
+            rid,
+            {
+                "session_key": str(session.get("session_key") or ""),
+                "instructions": instructions,
+                "tools": tools,
+            },
+        )
+    except Exception as exc:
+        return _err(rid, 5000, f"live session description failed: {exc}")
+
+
+@method("live.tool.execute")
+def _(rid, params: dict) -> dict:
+    """Execute one external-model function call through the Hermes runtime."""
+
+    session, err = _sess(params, rid)
+    if err:
+        return err
+    if _session_uses_compute_host(session):
+        return _err(rid, 4009, "live tool execution is not available for compute-host sessions")
+    if session.get("running"):
+        return _err(rid, 4009, "session is busy with a text turn")
+
+    name = str(params.get("name") or "").strip()
+    call_id = str(params.get("call_id") or "").strip() or f"live_{uuid.uuid4().hex}"
+    arguments = params.get("arguments")
+    if not name:
+        return _err(rid, 4001, "tool name required")
+    if not isinstance(arguments, dict):
+        return _err(rid, 4001, "tool arguments must be an object")
+
+    agent = session.get("agent")
+    allowed = {
+        str(tool.get("function", {}).get("name") or "")
+        for tool in (getattr(agent, "tools", None) or [])
+        if isinstance(tool, dict)
+    }
+    if name not in allowed:
+        return _err(rid, 4003, f"tool is not available in this session: {name}")
+
+    lock = session.setdefault("live_tool_lock", threading.Lock())
+    if not lock.acquire(blocking=False):
+        return _err(rid, 4009, "another live tool call is still running")
+
+    assistant_dict = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+            }
+        ],
+    }
+    call = SimpleNamespace(
+        id=call_id,
+        function=SimpleNamespace(name=name, arguments=json.dumps(arguments, ensure_ascii=False)),
+    )
+    assistant = SimpleNamespace(tool_calls=[call])
+    execution_messages = [assistant_dict]
+    tokens = _set_session_context(session["session_key"], cwd=_session_cwd(session))
+    try:
+        agent._execute_tool_calls(assistant, execution_messages, session["session_key"])
+        if len(execution_messages) < 2:
+            return _err(rid, 5000, f"Hermes produced no result for tool: {name}")
+        tool_message = execution_messages[-1]
+        content = tool_message.get("content", "")
+        output = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+        # The Realtime provider owns its function-call/output items. Mirroring
+        # those synthetic messages into Hermes text history would corrupt role
+        # alternation when the voice model speaks a preamble before the call.
+        # The completed spoken answer is persisted by live.transcript.append.
+        session["last_active"] = time.time()
+        return _ok(rid, {"call_id": call_id, "name": name, "output": output})
+    except Exception as exc:
+        logger.exception("live tool execution failed for %s", name)
+        return _err(rid, 5000, f"tool execution failed: {exc}")
+    finally:
+        _clear_session_context(tokens)
+        lock.release()
+
+
+@method("live.transcript.append")
+def _(rid, params: dict) -> dict:
+    """Mirror one completed live transcript item into Hermes history."""
+
+    session, err = _sess(params, rid)
+    if err:
+        return err
+    role = str(params.get("role") or "").strip().lower()
+    text = str(params.get("text") or "").strip()
+    if role not in {"user", "assistant"}:
+        return _err(rid, 4001, "role must be user or assistant")
+    if not text:
+        return _ok(rid, {"appended": False})
+
+    merged = False
+    with session["history_lock"]:
+        history = session.get("history", [])
+        if history and history[-1].get("role") == role:
+            existing = str(history[-1].get("content") or "").strip()
+            # A reconnect may replay the exact completion. A genuinely new
+            # same-role segment is common around tool calls (brief preamble,
+            # then the result), so merge it into one valid Hermes turn.
+            if text == existing or existing.endswith(text):
+                return _ok(rid, {"appended": False, "merged": False})
+            separator = "\n\n" if role == "assistant" else " "
+            history[-1]["content"] = f"{existing}{separator}{text}".strip()
+            merged = True
+        else:
+            history.append({"role": role, "content": text})
+        session["history_version"] = int(session.get("history_version", 0)) + 1
+        session["last_active"] = time.time()
+        persisted_history = list(history)
+
+    try:
+        _ensure_session_db_row(session)
+        with _session_db(session) as db:
+            if db is not None:
+                if merged:
+                    db.replace_messages(
+                        session_id=session["session_key"],
+                        messages=persisted_history,
+                        active_only=True,
+                    )
+                else:
+                    db.append_message(session_id=session["session_key"], role=role, content=text)
+    except Exception:
+        logger.exception("failed to persist live %s transcript", role)
+
+    return _ok(rid, {"appended": True, "merged": merged})
 
 
 @method("session.undo")

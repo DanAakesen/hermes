@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useI18n } from '@/i18n'
-import { chatMessageText } from '@/lib/chat-messages'
+import { chatMessageText, textPart } from '@/lib/chat-messages'
 import { triggerHaptic } from '@/lib/haptics'
 import { resetBrowseState } from '@/store/composer-input-history'
 import { notifyError } from '@/store/notifications'
-import { $messages } from '@/store/session'
+import { $messages, setMessages } from '@/store/session'
 import { $autoSpeakReplies, setAutoSpeakReplies } from '@/store/voice-prefs'
 
+import { useComposerLiveVoiceProvider } from '../contrib'
 import type { ComposerTarget } from '../focus'
 import { onComposerVoiceToggleRequest } from '../focus'
 import type { ChatBarProps } from '../types'
 
 import { useAutoSpeakReplies } from './use-auto-speak-replies'
+import { useLiveVoiceProvider } from './use-live-voice-provider'
 import { useVoiceConversation } from './use-voice-conversation'
 import { useVoiceRecorder } from './use-voice-recorder'
 
@@ -52,6 +54,24 @@ export function useComposerVoice({
   const { t } = useI18n()
   const [voiceConversationActive, setVoiceConversationActive] = useState(false)
   const lastSpokenIdRef = useRef<string | null>(null)
+  const liveProvider = useComposerLiveVoiceProvider()
+
+  const handleLiveFatalError = useCallback((error: unknown) => {
+    notifyError(error, 'Could not start live voice')
+    setVoiceConversationActive(false)
+  }, [])
+
+  const handleLiveTranscript = useCallback((role: 'assistant' | 'user', text: string) => {
+    setMessages(messages => [
+      ...messages,
+      {
+        id: `live-${role}-${crypto.randomUUID()}`,
+        role,
+        parts: [textPart(text)],
+        timestamp: Math.floor(Date.now() / 1000)
+      }
+    ])
+  }, [])
 
   const { dictate, voiceActivityState, voiceStatus } = useVoiceRecorder({
     focusInput,
@@ -101,15 +121,25 @@ export function useComposerVoice({
     await onSubmit(text)
   }
 
-  const conversation = useVoiceConversation({
+  const legacyConversation = useVoiceConversation({
     busy,
     consumePendingResponse,
-    enabled: voiceConversationActive,
+    enabled: voiceConversationActive && !liveProvider,
     onFatalError: () => setVoiceConversationActive(false),
     onSubmit: submitVoiceTurn,
     onTranscribeAudio,
     pendingResponse
   })
+
+  const liveConversation = useLiveVoiceProvider({
+    enabled: voiceConversationActive && Boolean(liveProvider),
+    onFatalError: handleLiveFatalError,
+    onTranscript: handleLiveTranscript,
+    provider: liveProvider,
+    sessionId
+  })
+
+  const conversation = liveProvider ? liveConversation : legacyConversation
 
   // The `composer.voice` hotkey (Ctrl+B) toggles the conversation. Starting
   // with STT unconfigured lets the conversation surface its own "configure
@@ -148,7 +178,7 @@ export function useComposerVoice({
   }, [t])
 
   useAutoSpeakReplies({
-    conversationActive: voiceConversationActive,
+    conversationActive: voiceConversationActive && !liveProvider,
     failureLabel: t.assistant.thread.readAloudFailed,
     markSpoken: consumePendingResponse,
     pendingReply: pendingResponse,

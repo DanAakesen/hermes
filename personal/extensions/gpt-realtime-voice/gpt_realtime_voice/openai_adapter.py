@@ -20,8 +20,14 @@ class RealtimeUpstreamError(RuntimeError):
 class RealtimeVoiceAdapter(Protocol):
     """Boundary for future Realtime providers such as GPT Live 1."""
 
-    async def create_browser_session(self, api_key: str, safety_identifier: str) -> dict[str, Any]:
-        """Return short-lived browser connection data without exposing the server key."""
+    async def create_session(
+        self,
+        api_key: str,
+        safety_identifier: str,
+        instructions: str,
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Return short-lived client connection data without exposing the server key."""
 
     def public_config(self) -> dict[str, Any]:
         """Return non-secret provider metadata used by the browser transport."""
@@ -32,7 +38,7 @@ class OpenAIRealtimeAdapter:
     config: VoiceRuntimeConfig
     http_client: httpx.AsyncClient | None = None
 
-    def session_request(self) -> dict[str, Any]:
+    def session_request(self, instructions: str, tools: list[dict[str, Any]]) -> dict[str, Any]:
         """Build the current GA session shape in one replaceable adapter."""
 
         return {
@@ -45,16 +51,22 @@ class OpenAIRealtimeAdapter:
                 "model": self.config.realtime_model,
                 "output_modalities": ["audio"],
                 "instructions": (
-                    "You are the realtime speech transport for Hermes. Hermes is the agent. "
-                    "Never answer microphone input automatically. When asked to render a Hermes "
-                    "response, speak only that supplied response and add no facts or advice."
+                    f"{instructions}\n\n"
+                    "You are Hermes in a live voice session. Respond naturally and concisely in speech. "
+                    "Use the supplied Hermes tools whenever they are needed. Tool execution and approvals "
+                    "are controlled by the Hermes harness; never claim a tool succeeded until its result "
+                    "is returned. The supplied tool schemas are the authoritative list of tools available "
+                    "in this session. If asked what tools you have, answer from those schemas; never run "
+                    "Hermes setup, Hermes tools, or another interactive configuration command to enumerate "
+                    "them. Do not start interactive terminal programs in a voice session. Do not mention "
+                    "transcripts or the voice transport unless asked."
                 ),
                 "audio": {
                     "input": {
                         "transcription": {"model": self.config.transcription_model},
                         "turn_detection": {
                             "type": "server_vad",
-                            "create_response": False,
+                            "create_response": True,
                             "interrupt_response": True,
                             "prefix_padding_ms": 300,
                             "silence_duration_ms": 500,
@@ -64,8 +76,8 @@ class OpenAIRealtimeAdapter:
                         "voice": self.config.voice,
                     },
                 },
-                "tool_choice": "none",
-                "tools": [],
+                "tool_choice": "auto",
+                "tools": tools,
             },
         }
 
@@ -77,7 +89,13 @@ class OpenAIRealtimeAdapter:
             "calls_url": "https://api.openai.com/v1/realtime/calls",
         }
 
-    async def create_browser_session(self, api_key: str, safety_identifier: str) -> dict[str, Any]:
+    async def create_session(
+        self,
+        api_key: str,
+        safety_identifier: str,
+        instructions: str,
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         if not api_key.strip():
             raise RealtimeUpstreamError("OPENAI_API_KEY is not configured")
 
@@ -91,7 +109,7 @@ class OpenAIRealtimeAdapter:
                     "Content-Type": "application/json",
                     "OpenAI-Safety-Identifier": safety_identifier,
                 },
-                json=self.session_request(),
+                json=self.session_request(instructions, tools),
             )
             if response.status_code >= 400:
                 request_id = response.headers.get("x-request-id", "not provided")

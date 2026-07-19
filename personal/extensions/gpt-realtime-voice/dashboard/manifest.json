@@ -1,0 +1,8 @@
+{
+  "name": "gpt-realtime-voice",
+  "label": "GPT Realtime Voice",
+  "description": "Native bidirectional voice provider for Hermes Desktop",
+  "version": "0.2.0",
+  "tab": { "hidden": true },
+  "api": "plugin_api.py"
+}

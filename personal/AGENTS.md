@@ -8,8 +8,9 @@ upstream contribution surface.
 - Never commit credentials, session tokens, transcripts, or generated runtime
   state.
 - Prefer Hermes plugin APIs and existing gateway transports over edits to core.
-- Voice clients must treat Hermes as the agent. Realtime providers may capture,
-  transcribe, and render speech, but must not own tools or durable state.
+- Voice clients must treat Hermes as the harness. Realtime providers may run
+  live voice inference and select functions, but Hermes alone executes tools,
+  applies approvals, and owns durable state.
 - Default network services to loopback. Remote access requires authenticated
   TLS termination and a separate security review.
 - Never auto-approve Hermes tool actions from voice input.
