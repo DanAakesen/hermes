@@ -20,10 +20,31 @@ const provider = {
     const handledCalls = new Set()
 
     const state = next => context.onState(next)
+    const persistedTraceEvents = new Set([
+      'session.ready',
+      'tool.complete',
+      'response.create',
+      'response.created',
+      'audio.started'
+    ])
     // Electron forwards renderer warnings into desktop.log. Keep this as
     // metadata-only prototype telemetry: never include transcript, arguments,
     // tool output, or credentials.
-    const trace = (event, details = {}) => console.warn(`[gpt-realtime-voice] ${event}`, details)
+    const trace = (event, details = {}) => {
+      console.warn(`[gpt-realtime-voice] ${event}`, details)
+      if (!persistedTraceEvents.has(event)) return
+      void context
+        .rest('/event', {
+          method: 'POST',
+          body: {
+            event,
+            tool: typeof details.name === 'string' ? details.name : undefined,
+            outcome: typeof details.ok === 'boolean' ? (details.ok ? 'ok' : 'error') : undefined
+          },
+          timeoutMs: 2_000
+        })
+        .catch(() => undefined)
+    }
     const send = event => {
       if (dc?.readyState !== 'open') {
         throw new Error('Realtime control channel is not open')

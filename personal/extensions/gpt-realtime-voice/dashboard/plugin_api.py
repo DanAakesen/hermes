@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import secrets
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 if str(_PLUGIN_ROOT) not in sys.path:
@@ -23,6 +24,7 @@ from hermes_constants import get_hermes_home
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 load_hermes_dotenv(hermes_home=get_hermes_home())
 _adapter = OpenAIRealtimeAdapter(VoiceRuntimeConfig())
 
@@ -30,6 +32,20 @@ _adapter = OpenAIRealtimeAdapter(VoiceRuntimeConfig())
 class SessionRequest(BaseModel):
     instructions: str = Field(min_length=1, max_length=500_000)
     tools: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+
+
+class LifecycleEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event: Literal[
+        "session.ready",
+        "tool.complete",
+        "response.create",
+        "response.created",
+        "audio.started",
+    ]
+    tool: str | None = Field(default=None, max_length=128)
+    outcome: Literal["ok", "error"] | None = None
 
 
 def _safety_identifier() -> str:
@@ -66,3 +82,16 @@ async def create_session(body: SessionRequest) -> dict[str, Any]:
         )
     except RealtimeUpstreamError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/event")
+def record_lifecycle_event(body: LifecycleEvent) -> dict[str, bool]:
+    """Record metadata-only lifecycle proof without speech or tool payloads."""
+
+    logger.info(
+        "Realtime voice lifecycle event=%s tool=%s outcome=%s",
+        body.event,
+        body.tool or "not provided",
+        body.outcome or "not provided",
+    )
+    return {"recorded": True}

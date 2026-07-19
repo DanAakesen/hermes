@@ -14,6 +14,7 @@ const states = []
 const errors = []
 const toolCalls = []
 const transcripts = []
+const lifecycleEvents = []
 
 class FakeDataChannel {
   readyState = 'open'
@@ -105,7 +106,13 @@ plugin.register({
   register(value) {
     contribution = value
   },
-  rest: async () => ({ calls_url: 'https://api.openai.test/realtime/calls', value: 'ephemeral' })
+  rest: async (path, options) => {
+    if (path === '/event') {
+      lifecycleEvents.push(options.body)
+      return { recorded: true }
+    }
+    return { calls_url: 'https://api.openai.test/realtime/calls', value: 'ephemeral' }
+  }
 })
 
 assert.equal(contribution.area, 'composer.liveVoice')
@@ -153,6 +160,13 @@ assert.deepEqual(toolCalls, [
 assert.equal(sent.at(-2).type, 'conversation.item.create')
 assert.equal(sent.at(-2).item.type, 'function_call_output')
 assert.equal(sent.at(-1).type, 'response.create')
+assert.deepEqual(
+  lifecycleEvents.filter(event => ['tool.complete', 'response.create'].includes(event.event)),
+  [
+    { event: 'tool.complete', tool: 'session_search', outcome: 'ok' },
+    { event: 'response.create', tool: undefined, outcome: undefined }
+  ]
+)
 
 emit({ type: 'response.created' })
 emit({ type: 'output_audio_buffer.started' })
