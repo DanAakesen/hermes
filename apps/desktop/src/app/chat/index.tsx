@@ -209,6 +209,7 @@ export function ChatView({
   onToggleSelectedPin,
   onDeleteSelectedSession,
   onCancel,
+  onEnsureSession,
   onAddContextRef,
   onAddUrl,
   onAttachImageBlob,

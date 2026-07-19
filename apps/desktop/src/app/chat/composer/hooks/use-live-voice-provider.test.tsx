@@ -9,7 +9,7 @@ function providerHarness() {
   const start = vi.fn(async () => undefined)
   const end = vi.fn(async () => undefined)
 
-  const create = vi.fn(() => ({
+  const create = vi.fn((_context: Parameters<ComposerLiveVoiceProvider['create']>[0]) => ({
     end,
     start,
     stopTurn: vi.fn(),
