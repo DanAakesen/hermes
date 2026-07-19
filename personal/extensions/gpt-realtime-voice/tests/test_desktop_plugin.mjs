@@ -181,6 +181,12 @@ assert.deepEqual(toolCalls, [
 ])
 assert.equal(sent.at(-1).type, 'conversation.item.create')
 assert.equal(sent.at(-1).item.type, 'function_call_output')
+assert.deepEqual(JSON.parse(sent.at(-1).item.output), {
+  status: 'success',
+  tool: 'session_search',
+  result: 'Most recent: Realtime voice end-to-end validation',
+  response_instruction: "Answer the user's pending request aloud using this result."
+})
 assert.equal(sent.filter(event => event.type === 'response.create').length, 0)
 
 // Generating the preamble audio is not the same as finishing WebRTC playout.
@@ -189,6 +195,8 @@ emit({ type: 'response.output_audio.done' })
 assert.equal(sent.filter(event => event.type === 'response.create').length, 0)
 emit({ type: 'output_audio_buffer.stopped' })
 assert.equal(sent.at(-1).type, 'response.create')
+assert.deepEqual(sent.at(-1).response.output_modalities, ['audio'])
+assert.match(sent.at(-1).response.instructions, /Answer the user's original request aloud/)
 assert.deepEqual(
   lifecycleEvents.filter(event => ['tool.complete', 'response.create'].includes(event.event)),
   [
@@ -197,6 +205,10 @@ assert.deepEqual(
   ]
 )
 
+emit({ type: 'response.created' })
+emit({ type: 'response.done', response: { output: [], status: 'completed' } })
+assert.equal(sent.filter(event => event.type === 'response.create').length, 2)
+assert.match(sent.at(-1).response.instructions, /Do not stay silent/)
 emit({ type: 'response.created' })
 emit({ type: 'output_audio_buffer.started' })
 await new Promise(resolve => setTimeout(resolve, 0))

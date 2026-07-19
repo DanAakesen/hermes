@@ -24,6 +24,21 @@ AudioLines voice button. Dictation and read-aloud remain separate legacy
 controls; the primary conversation button uses Realtime when this plugin is
 enabled.
 
+## Validation
+
+Run the deterministic protocol and real OpenAI tool-continuation checks from
+the repository root:
+
+```powershell
+node .\personal\extensions\gpt-realtime-voice\tests\test_desktop_plugin.mjs
+$env:HERMES_HOME = 'C:\Repo\hermes\.local\home'
+& 'C:\Users\danaakesen\.hermes\venvs\repo-hermes\Scripts\python.exe' `
+  .\personal\extensions\gpt-realtime-voice\tests\manual_realtime_tool_smoke.py
+```
+
+The live smoke test prints event counts only. It does not print credentials,
+tool arguments, tool results, or transcripts.
+
 ## Current milestone
 
 - Direct bidirectional audio over WebRTC; no transcript-gated STT → Hermes → TTS cascade.

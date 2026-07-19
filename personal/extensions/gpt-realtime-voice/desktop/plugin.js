@@ -19,6 +19,8 @@ const provider = {
     let outputAudioActive = false
     let pendingContinuation = false
     let responseCreatePending = false
+    let activeContinuation = false
+    let continuationRetryCount = 0
     let continuationTimer = 0
     const handledCalls = new Set()
 
@@ -106,9 +108,31 @@ const provider = {
       clearTimeout(continuationTimer)
       continuationTimer = 0
       responseCreatePending = true
-      send({ type: 'response.create' })
+      send({
+        type: 'response.create',
+        response: {
+          output_modalities: ['audio'],
+          instructions:
+            'Continue the current Hermes turn. The immediately preceding function_call_output contains the completed Hermes tool result. Answer the user\'s original request aloud now using that result. Do not stay silent or merely acknowledge the tool call. Be concise and natural.'
+        }
+      })
       trace('response.create', { reason: 'tool-continuation' })
       state({ status: 'thinking' })
+    }
+
+    const toolOutputEnvelope = (name, ok, value) => {
+      let result = String(value || '')
+      try {
+        result = JSON.parse(result)
+      } catch {
+        // Plain-text tool results remain strings inside the stable envelope.
+      }
+      return JSON.stringify({
+        status: ok ? 'success' : 'error',
+        tool: name,
+        result,
+        response_instruction: 'Answer the user\'s pending request aloud using this result.'
+      })
     }
 
     const appendTranscript = (role, text) => {
@@ -127,6 +151,7 @@ const provider = {
       const name = String(event.name || '')
       if (!callId || !name || handledCalls.has(callId)) return
       handledCalls.add(callId)
+      continuationRetryCount = 0
       trace('tool.start', { callId, name })
       state({ status: 'thinking' })
 
@@ -149,7 +174,7 @@ const provider = {
           item: {
             type: 'function_call_output',
             call_id: callId,
-            output: String(result.output || '')
+            output: toolOutputEnvelope(name, true, result.output)
           }
         })
         pendingContinuation = true
@@ -160,7 +185,11 @@ const provider = {
           item: {
             type: 'function_call_output',
             call_id: callId,
-            output: JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+            output: toolOutputEnvelope(
+              name,
+              false,
+              JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+            )
           }
         })
         pendingContinuation = true
@@ -174,6 +203,7 @@ const provider = {
       switch (event.type) {
         case 'input_audio_buffer.speech_started':
           speechActive = true
+          continuationRetryCount = 0
           clearTimeout(continuationTimer)
           continuationTimer = 0
           trace('speech.started')
@@ -193,6 +223,7 @@ const provider = {
           clearTimeout(continuationTimer)
           continuationTimer = 0
           activeResponse = true
+          activeContinuation = responseCreatePending
           pendingContinuation = false
           responseCreatePending = false
           trace('response.created')
@@ -223,6 +254,7 @@ const provider = {
         case 'output_audio_buffer.cleared':
           outputAudioActive = false
           activeResponse = false
+          activeContinuation = false
           responseCreatePending = false
           trace('response.cancelled')
           state({ status: muted ? 'idle' : 'listening' })
@@ -230,6 +262,7 @@ const provider = {
           break
         case 'response.cancelled':
           activeResponse = false
+          activeContinuation = false
           responseCreatePending = false
           trace('response.cancelled')
           state({ status: muted ? 'idle' : 'listening' })
@@ -245,12 +278,24 @@ const provider = {
         case 'response.done': {
           activeResponse = false
           responseCreatePending = false
-          const calls = (event.response?.output || []).filter(item => item.type === 'function_call')
+          const output = event.response?.output || []
+          const calls = output.filter(item => item.type === 'function_call')
+          const wasContinuation = activeContinuation
+          activeContinuation = false
           trace('response.done', { callCount: calls.length, status: event.response?.status || 'unknown' })
           for (const call of calls) {
             void executeTool(call).catch(recoverableError)
           }
           if (calls.length === 0) {
+            const hasSpokenOutput = output.some(
+              item => item.type === 'message' && Array.isArray(item.content) && item.content.length > 0
+            )
+            if (wasContinuation && !hasSpokenOutput && continuationRetryCount < 1) {
+              continuationRetryCount += 1
+              pendingContinuation = true
+              continueWhenIdle()
+              break
+            }
             state({ status: muted ? 'idle' : 'listening' })
             continueWhenIdle()
           }
