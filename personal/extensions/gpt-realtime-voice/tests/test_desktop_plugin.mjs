@@ -15,6 +15,8 @@ const errors = []
 const toolCalls = []
 const transcripts = []
 const lifecycleEvents = []
+let audioPlayCalls = 0
+let playbackConnections = 0
 
 class FakeDataChannel {
   readyState = 'open'
@@ -64,16 +66,35 @@ Object.defineProperty(globalThis, 'navigator', {
 globalThis.RTCPeerConnection = FakePeerConnection
 globalThis.Audio = class {
   autoplay = false
+  paused = true
+  playsInline = false
   srcObject = null
+  volume = 0
   pause() {}
-  async play() {}
+  async play() {
+    audioPlayCalls += 1
+    this.paused = false
+  }
 }
 globalThis.AudioContext = class {
+  destination = {}
+  state = 'running'
   createAnalyser() {
     return { fftSize: 0, getByteTimeDomainData() {} }
   }
+  createMediaElementSource() {
+    return {
+      connect() {
+        playbackConnections += 1
+      },
+      disconnect() {}
+    }
+  }
   createMediaStreamSource() {
     return { connect() {} }
+  }
+  async resume() {
+    this.state = 'running'
   }
   async close() {}
 }
@@ -170,6 +191,9 @@ assert.deepEqual(
 
 emit({ type: 'response.created' })
 emit({ type: 'output_audio_buffer.started' })
+await new Promise(resolve => setTimeout(resolve, 0))
+assert.equal(playbackConnections, 1)
+assert.ok(audioPlayCalls >= 1)
 emit({ type: 'input_audio_buffer.speech_started' })
 emit({ type: 'output_audio_buffer.cleared' })
 emit({ type: 'input_audio_buffer.speech_stopped' })

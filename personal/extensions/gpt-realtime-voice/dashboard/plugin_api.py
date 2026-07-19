@@ -42,7 +42,14 @@ class LifecycleEvent(BaseModel):
         "tool.complete",
         "response.create",
         "response.created",
+        "response.done",
+        "response.cancelled",
         "audio.started",
+        "audio.stopped",
+        "speech.started",
+        "speech.stopped",
+        "playback.ready",
+        "playback.error",
     ]
     tool: str | None = Field(default=None, max_length=128)
     outcome: Literal["ok", "error"] | None = None

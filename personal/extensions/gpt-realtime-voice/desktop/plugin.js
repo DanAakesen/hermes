@@ -9,6 +9,8 @@ const provider = {
     let audio = null
     let audioContext = null
     let analyser = null
+    let playbackSource = null
+    let playbackPromise = null
     let levelFrame = 0
     let muted = false
     let closed = false
@@ -25,7 +27,14 @@ const provider = {
       'tool.complete',
       'response.create',
       'response.created',
-      'audio.started'
+      'response.done',
+      'response.cancelled',
+      'audio.started',
+      'audio.stopped',
+      'speech.started',
+      'speech.stopped',
+      'playback.ready',
+      'playback.error'
     ])
     // Electron forwards renderer warnings into desktop.log. Keep this as
     // metadata-only prototype telemetry: never include transcript, arguments,
@@ -57,6 +66,28 @@ const provider = {
       console.warn('[gpt-realtime-voice] recoverable Realtime event', normalized)
       host.notifyError(normalized, 'Realtime voice recovered')
       if (!closed) state({ status: speechActive ? 'listening' : 'idle' })
+    }
+
+    const ensurePlayback = () => {
+      if (!audio || closed) return Promise.resolve()
+      if (playbackPromise) return playbackPromise
+
+      playbackPromise = (async () => {
+        try {
+          if (audioContext?.state === 'suspended') {
+            await audioContext.resume()
+          }
+          await audio.play()
+          trace('playback.ready')
+        } catch (error) {
+          trace('playback.error', { ok: false })
+          context.onError(error instanceof Error ? error : new Error(String(error)))
+        } finally {
+          playbackPromise = null
+        }
+      })()
+
+      return playbackPromise
     }
 
     const continueWhenIdle = () => {
@@ -168,6 +199,7 @@ const provider = {
         case 'output_audio_buffer.started':
         case 'response.output_audio.started':
           trace('audio.started')
+          void ensurePlayback()
           state({ status: 'speaking' })
           break
         case 'output_audio_buffer.stopped':
@@ -234,6 +266,7 @@ const provider = {
       closed = true
       cancelAnimationFrame(levelFrame)
       clearTimeout(continuationTimer)
+      playbackSource?.disconnect()
       dc?.close()
       pc?.close()
       stream?.getTracks().forEach(track => track.stop())
@@ -244,6 +277,8 @@ const provider = {
       dc = null
       stream = null
       analyser = null
+      playbackSource = null
+      playbackPromise = null
       state({ level: 0, muted: false, status: 'idle' })
     }
 
@@ -262,12 +297,29 @@ const provider = {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true }
         })
+        audioContext = new AudioContext()
+        analyser = audioContext.createAnalyser()
+        analyser.fftSize = 256
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
+
         pc = new RTCPeerConnection()
         audio = new Audio()
         audio.autoplay = true
+        audio.playsInline = true
+        audio.volume = 1
+        try {
+          playbackSource = audioContext.createMediaElementSource(audio)
+          playbackSource.connect(audioContext.destination)
+        } catch (error) {
+          // The HTML media element still has its native output path if a
+          // platform cannot expose MediaStream audio through Web Audio.
+          console.warn('[gpt-realtime-voice] Web Audio playback route unavailable', error)
+        }
         pc.ontrack = event => {
-          audio.srcObject = event.streams[0]
-          void audio.play().catch(context.onError)
+          audio.srcObject = event.streams[0] || new MediaStream([event.track])
+          void ensurePlayback()
         }
         stream.getTracks().forEach(track => pc.addTrack(track, stream))
         dc = pc.createDataChannel('oai-events')
@@ -301,9 +353,6 @@ const provider = {
         if (!response.ok) throw new Error(`OpenAI Realtime connection failed (HTTP ${response.status})`)
         await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() })
 
-        audioContext = new AudioContext()
-        analyser = audioContext.createAnalyser()
-        analyser.fftSize = 256
         startMeter()
         trace('session.ready')
         state({ status: 'listening' })
