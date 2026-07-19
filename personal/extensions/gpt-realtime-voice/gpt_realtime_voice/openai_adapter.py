@@ -11,6 +11,16 @@ from .config import VoiceRuntimeConfig
 
 
 CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
+WAIT_FOR_USER_TOOL = {
+    "type": "function",
+    "name": "wait_for_user",
+    "description": (
+        "Call this when the latest audio does not need a spoken response, such as silence, "
+        "background noise, music, TV audio, a side conversation, or speech not addressed "
+        "to Hermes. This ends the turn silently and keeps listening."
+    ),
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
 
 
 class RealtimeUpstreamError(RuntimeError):
@@ -41,6 +51,10 @@ class OpenAIRealtimeAdapter:
     def session_request(self, instructions: str, tools: list[dict[str, Any]]) -> dict[str, Any]:
         """Build the current GA session shape in one replaceable adapter."""
 
+        session_tools = [*tools]
+        if not any(tool.get("name") == WAIT_FOR_USER_TOOL["name"] for tool in session_tools):
+            session_tools.append(WAIT_FOR_USER_TOOL)
+
         return {
             "expires_after": {
                 "anchor": "created_at",
@@ -58,16 +72,24 @@ class OpenAIRealtimeAdapter:
                     "is returned. The supplied tool schemas are the authoritative list of tools available "
                     "in this session. If asked what tools you have, answer from those schemas; never run "
                     "Hermes setup, Hermes tools, or another interactive configuration command to enumerate "
-                    "them. Do not start interactive terminal programs in a voice session. Do not mention "
-                    "transcripts or the voice transport unless asked."
+                    "them. Do not start interactive terminal programs in a voice session. If the latest "
+                    "audio is background music, TV audio, silence, a side conversation, or speech not "
+                    "addressed to you, call wait_for_user and do not respond conversationally afterward. "
+                    "Use wait_for_user only for non-addressed audio; if the user clearly addresses you but "
+                    "is unintelligible, ask for clarification. Do not mention transcripts or the voice "
+                    "transport unless asked."
                 ),
                 "audio": {
                     "input": {
+                        # Far-field filtering is intended for laptop/desktop microphones and
+                        # runs before VAD, reducing false turns from speakers in the room.
+                        "noise_reduction": {"type": "far_field"},
                         "transcription": {"model": self.config.transcription_model},
                         "turn_detection": {
                             "type": "server_vad",
                             "create_response": True,
                             "interrupt_response": True,
+                            "threshold": 0.6,
                             "prefix_padding_ms": 300,
                             "silence_duration_ms": 500,
                         },
@@ -77,7 +99,7 @@ class OpenAIRealtimeAdapter:
                     },
                 },
                 "tool_choice": "auto",
-                "tools": tools,
+                "tools": session_tools,
             },
         }
 

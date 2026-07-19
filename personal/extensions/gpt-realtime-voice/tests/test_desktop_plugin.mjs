@@ -17,6 +17,7 @@ const transcripts = []
 const lifecycleEvents = []
 let audioPlayCalls = 0
 let playbackConnections = 0
+let requestedAudioConstraints = null
 
 class FakeDataChannel {
   readyState = 'open'
@@ -61,7 +62,15 @@ const stream = {
 
 Object.defineProperty(globalThis, 'navigator', {
   configurable: true,
-  value: { mediaDevices: { getUserMedia: async () => stream } }
+  value: {
+    mediaDevices: {
+      getSupportedConstraints: () => ({ voiceIsolation: true }),
+      getUserMedia: async constraints => {
+        requestedAudioConstraints = constraints.audio
+        return stream
+      }
+    }
+  }
 })
 globalThis.RTCPeerConnection = FakePeerConnection
 globalThis.Audio = class {
@@ -147,6 +156,12 @@ const session = contribution.data.create({
 
 await session.start()
 assert.equal(states.at(-1).status, 'listening')
+assert.deepEqual(requestedAudioConstraints, {
+  autoGainControl: true,
+  echoCancellation: true,
+  noiseSuppression: true,
+  voiceIsolation: true
+})
 
 const emit = event => dataChannel.onmessage({ data: JSON.stringify(event) })
 emit({ type: 'response.created' })
@@ -219,6 +234,58 @@ emit({ type: 'output_audio_buffer.cleared' })
 emit({ type: 'input_audio_buffer.speech_stopped' })
 emit({ type: 'response.created' })
 emit({ type: 'response.done', response: { output: [], status: 'completed' } })
+
+emit({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'background song lyric' })
+emit({ type: 'response.created' })
+emit({
+  type: 'response.done',
+  response: {
+    output: [
+      { arguments: '{}', call_id: 'call-wait', name: 'wait_for_user', type: 'function_call' }
+    ],
+    status: 'completed'
+  }
+})
+await new Promise(resolve => setTimeout(resolve, 0))
+assert.equal(toolCalls.length, 1)
+assert.equal(transcripts.some(value => value.text === 'background song lyric'), false)
+const waitOutput = sent.find(event => event.item?.call_id === 'call-wait')
+assert.deepEqual(JSON.parse(waitOutput.item.output), { status: 'success', result: 'waiting' })
+
+emit({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'stop the music' })
+emit({ type: 'response.created' })
+globalThis.__voiceTestHost.request = async (method, params) => {
+  if (method === 'live.tool.execute') {
+    toolCalls.push(params)
+    return { output: '{"error":"Spotify rejected this playback request"}' }
+  }
+  if (method === 'live.transcript.append') {
+    transcripts.push(params)
+    return { appended: true }
+  }
+  throw new Error(`unexpected RPC after start: ${method}`)
+}
+emit({
+  type: 'response.done',
+  response: {
+    output: [
+      { arguments: '{"action":"pause"}', call_id: 'call-spotify', name: 'spotify_playback', type: 'function_call' }
+    ],
+    status: 'completed'
+  }
+})
+await new Promise(resolve => setTimeout(resolve, 0))
+const spotifyOutput = sent.find(event => event.item?.call_id === 'call-spotify')
+assert.equal(JSON.parse(spotifyOutput.item.output).status, 'error')
+assert.equal(transcripts.some(value => value.text === 'stop the music'), true)
+emit({ type: 'response.created' })
+emit({
+  type: 'response.done',
+  response: {
+    output: [{ type: 'message', content: [{ type: 'audio', transcript: 'Spotify could not pause.' }] }],
+    status: 'completed'
+  }
+})
 
 assert.equal(errors.length, 0)
 assert.equal(states.at(-1).status, 'listening')

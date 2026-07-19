@@ -42,7 +42,8 @@ tool arguments, tool results, or transcripts.
 ## Current milestone
 
 - Direct bidirectional audio over WebRTC; no transcript-gated STT → Hermes → TTS cascade.
-- `gpt-realtime-2.1` with server VAD, interruption, and model-owned speech.
+- `gpt-realtime-2.1` with server VAD, far-field noise reduction, interruption,
+  background-audio suppression, and model-owned speech.
 - The live model receives the current Hermes session prompt and function schemas.
 - Function calls run through the existing Hermes tool executor, including tool
   progress, guardrails, approvals, memory, and delegation.

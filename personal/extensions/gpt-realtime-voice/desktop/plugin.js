@@ -1,5 +1,7 @@
 import { COMPOSER_AREAS, host } from '@hermes/plugin-sdk'
 
+const WAIT_FOR_USER_TOOL = 'wait_for_user'
+
 const provider = {
   label: 'OpenAI Realtime',
   create(context) {
@@ -23,6 +25,7 @@ const provider = {
     let continuationRetryCount = 0
     let continuationTimer = 0
     const handledCalls = new Set()
+    const pendingUserTranscripts = []
 
     const state = next => context.onState(next)
     const persistedTraceEvents = new Set([
@@ -120,13 +123,22 @@ const provider = {
       state({ status: 'thinking' })
     }
 
-    const toolOutputEnvelope = (name, ok, value) => {
+    const parseToolOutput = value => {
       let result = String(value || '')
       try {
         result = JSON.parse(result)
       } catch {
-        // Plain-text tool results remain strings inside the stable envelope.
+        return { ok: true, result }
       }
+      const failed =
+        result &&
+        typeof result === 'object' &&
+        !Array.isArray(result) &&
+        (result.error != null || result.status === 'error' || result.ok === false || result.success === false)
+      return { ok: !failed, result }
+    }
+
+    const toolOutputEnvelope = (name, ok, result) => {
       return JSON.stringify({
         status: ok ? 'success' : 'error',
         tool: name,
@@ -146,12 +158,42 @@ const provider = {
       }).catch(context.onError)
     }
 
+    const bufferUserTranscript = text => {
+      const clean = String(text || '').trim()
+      if (clean && !closed) pendingUserTranscripts.push(clean)
+    }
+
+    const flushUserTranscripts = () => {
+      for (const transcript of pendingUserTranscripts.splice(0)) {
+        appendTranscript('user', transcript)
+      }
+    }
+
+    const discardUserTranscripts = () => {
+      pendingUserTranscripts.length = 0
+    }
+
     const executeTool = async event => {
       const callId = String(event.call_id || event.item_id || '')
       const name = String(event.name || '')
       if (!callId || !name || handledCalls.has(callId)) return
       handledCalls.add(callId)
       continuationRetryCount = 0
+
+      if (name === WAIT_FOR_USER_TOOL) {
+        send({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: callId,
+            output: JSON.stringify({ status: 'success', result: 'waiting' })
+          }
+        })
+        trace('tool.complete', { callId, name, ok: true })
+        state({ status: muted ? 'idle' : 'listening' })
+        return
+      }
+
       trace('tool.start', { callId, name })
       state({ status: 'thinking' })
 
@@ -169,16 +211,17 @@ const provider = {
           name,
           arguments: args
         })
+        const parsed = parseToolOutput(result.output)
         send({
           type: 'conversation.item.create',
           item: {
             type: 'function_call_output',
             call_id: callId,
-            output: toolOutputEnvelope(name, true, result.output)
+            output: toolOutputEnvelope(name, parsed.ok, parsed.result)
           }
         })
         pendingContinuation = true
-        trace('tool.complete', { callId, name, ok: true })
+        trace('tool.complete', { callId, name, ok: parsed.ok })
       } catch (error) {
         send({
           type: 'conversation.item.create',
@@ -188,7 +231,7 @@ const provider = {
             output: toolOutputEnvelope(
               name,
               false,
-              JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+              { error: error instanceof Error ? error.message : String(error) }
             )
           }
         })
@@ -269,10 +312,11 @@ const provider = {
           continueWhenIdle()
           break
         case 'conversation.item.input_audio_transcription.completed':
-          appendTranscript('user', event.transcript)
+          bufferUserTranscript(event.transcript)
           break
         case 'response.output_audio_transcript.done':
         case 'response.audio_transcript.done':
+          flushUserTranscripts()
           appendTranscript('assistant', event.transcript)
           break
         case 'response.done': {
@@ -280,9 +324,16 @@ const provider = {
           responseCreatePending = false
           const output = event.response?.output || []
           const calls = output.filter(item => item.type === 'function_call')
+          const actionableCalls = calls.filter(item => item.name !== WAIT_FOR_USER_TOOL)
+          const waitOnly = calls.length > 0 && actionableCalls.length === 0
           const wasContinuation = activeContinuation
           activeContinuation = false
           trace('response.done', { callCount: calls.length, status: event.response?.status || 'unknown' })
+          if (actionableCalls.length > 0) {
+            flushUserTranscripts()
+          } else if (waitOnly) {
+            discardUserTranscripts()
+          }
           for (const call of calls) {
             void executeTool(call).catch(recoverableError)
           }
@@ -290,6 +341,8 @@ const provider = {
             const hasSpokenOutput = output.some(
               item => item.type === 'message' && Array.isArray(item.content) && item.content.length > 0
             )
+            if (hasSpokenOutput) flushUserTranscripts()
+            else if (!wasContinuation) discardUserTranscripts()
             if (wasContinuation && !hasSpokenOutput && continuationRetryCount < 1) {
               continuationRetryCount += 1
               pendingContinuation = true
@@ -344,6 +397,7 @@ const provider = {
       analyser = null
       playbackSource = null
       playbackPromise = null
+      discardUserTranscripts()
       state({ level: 0, muted: false, status: 'idle' })
     }
 
@@ -359,9 +413,15 @@ const provider = {
           timeoutMs: 30_000
         })
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true }
-        })
+        const audioConstraints = {
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+        if (navigator.mediaDevices.getSupportedConstraints?.().voiceIsolation) {
+          audioConstraints.voiceIsolation = true
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
         audioContext = new AudioContext()
         analyser = audioContext.createAnalyser()
         analyser.fftSize = 256
